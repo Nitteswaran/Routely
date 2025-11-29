@@ -27,19 +27,29 @@ const io = new Server(httpServer, {
 
 // ==================== Middleware ====================
 
-// CORS configuration - Allow both configured URL and common development ports
-const allowedOrigins = [
-  env.FRONTEND_URL,
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:5174',
-]
+// CORS configuration - Restrict to Vercel app in production, allow localhost in development
+const VERCEL_APP_URL = 'https://routely-eosin.vercel.app'
+
+const allowedOrigins = env.NODE_ENV === 'production' 
+  ? [VERCEL_APP_URL] // Only allow Vercel app in production
+  : [
+      VERCEL_APP_URL, // Also allow Vercel in development for testing
+      env.FRONTEND_URL,
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:5174',
+    ]
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true)
+      // Allow requests with no origin (like mobile apps or curl requests) only in development
+      if (!origin) {
+        if (env.NODE_ENV === 'development') {
+          return callback(null, true)
+        }
+        return callback(new Error('Not allowed by CORS'))
+      }
       
       // Check if origin is in allowed list
       if (allowedOrigins.includes(origin)) {
@@ -73,6 +83,55 @@ if (env.NODE_ENV === 'development') {
 
 // ==================== Routes ====================
 
+// Gemini route (direct access)
+app.post('/gemini', async (req, res) => {
+  try {
+    const userPrompt = req.body.prompt
+
+    if (!userPrompt || !userPrompt.trim()) {
+      return res.status(400).json({ 
+        error: 'Prompt is required' 
+      })
+    }
+
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ 
+        error: 'Gemini API key is not configured' 
+      })
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: userPrompt }]
+          }]
+        })
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      return res.status(response.status).json({ 
+        error: errorData.error?.message || 'Failed to get response from Gemini API' 
+      })
+    }
+
+    const data = await response.json()
+    res.json(data)
+  } catch (error) {
+    console.error('Error calling Gemini API:', error)
+    res.status(500).json({ 
+      error: error.message || 'Internal server error' 
+    })
+  }
+})
+
 // API routes
 app.use('/api', routes)
 
@@ -83,6 +142,7 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
+      gemini: '/gemini (POST)',
       documentation: 'Coming soon',
     },
   })

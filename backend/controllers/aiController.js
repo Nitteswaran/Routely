@@ -16,10 +16,10 @@ export const chatWithAI = asyncHandler(async (req, res) => {
   }
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY
-  // Default to gemini-2.5-flash (fast, efficient, and available)
-  // Alternative options: gemini-2.0-flash, gemini-pro-latest, gemini-2.5-pro
+  // Default to gemini-2.0-flash-lite (lightweight and efficient)
+  // Alternative options: gemini-2.0-flash, gemini-2.5-flash, gemini-pro-latest, gemini-2.5-pro
   // Users can override with GEMINI_MODEL in .env if needed
-  const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite'
   const GEMINI_API_VERSION = process.env.GEMINI_API_VERSION || 'v1beta'
   const GEMINI_API_URL = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
   
