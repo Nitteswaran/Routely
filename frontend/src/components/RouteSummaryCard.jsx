@@ -100,20 +100,6 @@ const RouteSummaryCard = ({ route, loading = false }) => {
           </div>
         )}
         
-        {waypoints.length > 0 && (
-          <div className="pt-3 border-t border-gray-200">
-            <p className="text-sm text-gray-600 mb-2">Route Steps:</p>
-            <ul className="space-y-1 max-h-40 overflow-y-auto">
-              {waypoints.map((waypoint, index) => (
-                <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
-                  <span className="font-medium text-primary-600">{index + 1}.</span>
-                  <span>{waypoint.name || waypoint.instruction || `Step ${index + 1}`}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {route.start && (
           <div className="pt-3 border-t border-gray-200">
             <p className="text-sm text-gray-600 mb-1">Start:</p>
@@ -129,53 +115,6 @@ const RouteSummaryCard = ({ route, loading = false }) => {
             <p className="text-sm font-medium text-gray-900">
               {route.destination.address || `${route.destination.lat?.toFixed(4)}, ${route.destination.lng?.toFixed(4)}`}
             </p>
-          </div>
-        )}
-
-        {/* Turn-by-Turn Directions */}
-        {route.steps && route.steps.length > 0 && (
-          <div className="pt-3 border-t border-gray-200">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">Turn-by-Turn Directions</h4>
-            <ol className="space-y-2 max-h-96 overflow-y-auto">
-              {route.steps.map((step, index) => {
-                // Handle different step formats (Google Maps vs backend)
-                const instruction = step.instruction || step.instructions || step.maneuver?.instruction || `Step ${index + 1}`;
-                const distance = step.distance || step.distance?.value || 0;
-                const duration = step.duration || step.duration?.value || 0;
-                
-                return (
-                  <li key={index} className="flex items-start gap-3 pb-2 border-b border-gray-100 last:border-b-0">
-                    <div className="flex-shrink-0 w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center font-semibold text-xs">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div 
-                        className="text-sm font-medium text-gray-900 mb-1"
-                        dangerouslySetInnerHTML={{ __html: instruction }}
-                      />
-                      {(distance > 0 || duration > 0) && (
-                        <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
-                          {distance > 0 && (
-                            <span>
-                              {distance < 1000 
-                                ? `${Math.round(distance)} m` 
-                                : `${(distance / 1000).toFixed(2)} km`}
-                            </span>
-                          )}
-                          {duration > 0 && (
-                            <span>
-                              {duration < 60 
-                                ? `${Math.round(duration)} sec` 
-                                : `${Math.round(duration / 60)} min`}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                )
-              })}
-            </ol>
           </div>
         )}
       </div>

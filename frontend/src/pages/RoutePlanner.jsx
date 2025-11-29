@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import GoogleMapView from '../components/GoogleMapView'
-import CommutesWidget from '../components/CommutesWidget'
+import MultipleDestinations from '../components/MultipleDestinations'
 import RouteSummaryCard from '../components/RouteSummaryCard'
-import WeatherCard from '../components/WeatherCard'
+import DestinationWeatherCard from '../components/DestinationWeatherCard'
 import LoaderAnimation from '../components/LoaderAnimation'
 import api from '../services/api'
 import { calculateSafetyScore } from '../utils/safetyScore'
@@ -18,7 +18,6 @@ const RoutePlanner = () => {
   const [routeOptions, setRouteOptions] = useState([])
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0)
   const [viewMode, setViewMode] = useState('single') // 'single' or 'commutes'
-  const [originCoords, setOriginCoords] = useState(null)
   const [destinationCoords, setDestinationCoords] = useState(null)
 
   // Get user's current location
@@ -70,11 +69,7 @@ const RoutePlanner = () => {
     try {
       // Fetch safety data for start and destination points
       if (routeData.start && routeData.destination) {
-        // Set coordinates for weather cards
-        setOriginCoords({
-          lat: routeData.start.lat,
-          lng: routeData.start.lng,
-        })
+        // Set coordinates for destination weather card
         setDestinationCoords({
           lat: routeData.destination.lat,
           lng: routeData.destination.lng,
@@ -305,7 +300,7 @@ const RoutePlanner = () => {
       {/* Map and Route Summary */}
       {viewMode === 'commutes' ? (
         <div className="card p-0 overflow-hidden" style={{ minHeight: '600px' }}>
-          <CommutesWidget userLocation={userLocation} />
+          <MultipleDestinations userLocation={userLocation} />
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -357,24 +352,12 @@ const RoutePlanner = () => {
         </div>
       )}
 
-      {/* Weather Conditions - Only show in single route mode */}
-      {viewMode === 'single' && (originCoords || destinationCoords) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {originCoords && (
-            <WeatherCard
-              location={origin || 'Starting Point'}
-              label="Starting Point"
-              coordinates={originCoords}
-            />
-          )}
-          {destinationCoords && (
-            <WeatherCard
-              location={destination || 'Destination'}
-              label="Destination"
-              coordinates={destinationCoords}
-            />
-          )}
-        </div>
+      {/* Destination Weather & AQI - Only show in single route mode */}
+      {viewMode === 'single' && destinationCoords && (
+        <DestinationWeatherCard
+          location={destination || 'Destination'}
+          coordinates={destinationCoords}
+        />
       )}
     </div>
   )

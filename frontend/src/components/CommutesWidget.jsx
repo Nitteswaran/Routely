@@ -154,15 +154,50 @@ const CommutesWidget = ({ userLocation }) => {
       },
       "mapsApiKey": apiKey
     };
+    
+    let initAttempts = 0;
+    const maxAttempts = 10;
+    
     function initMap() {
-      console.log('Google Maps loaded, but Commutes widget requires the full JavaScript implementation.');
-      console.log('The Commutes class needs to be loaded from the complete widget code.');
-      // The Commutes class should be defined here or loaded from an external script
+      initAttempts++;
+      if (typeof google !== 'undefined' && typeof google.maps !== 'undefined') {
+        // Wait a bit more for Commutes class to be available
+        setTimeout(() => {
+          if (typeof Commutes !== 'undefined') {
+            try {
+              new Commutes(CONFIGURATION);
+              console.log('Commutes widget initialized successfully');
+            } catch (err) {
+              console.error('Error initializing Commutes widget:', err);
+              if (initAttempts < maxAttempts) {
+                setTimeout(initMap, 500);
+              }
+            }
+          } else {
+            console.log('Commutes class not yet available, attempt', initAttempts);
+            if (initAttempts < maxAttempts) {
+              setTimeout(initMap, 500);
+            } else {
+              console.error('Commutes class not found after', maxAttempts, 'attempts');
+            }
+          }
+        }, 100);
+      } else {
+        console.log('Google Maps API not yet loaded, attempt', initAttempts);
+        if (initAttempts < maxAttempts) {
+          setTimeout(initMap, 500);
+        }
+      }
     }
+    
+    // Load Google Maps API with Commutes widget
     const script = document.createElement('script');
     script.src = \`https://maps.googleapis.com/maps/api/js?key=\${apiKey}&callback=initMap&libraries=places,geometry&solution_channel=GMP_QB_commutes_v3_c\`;
     script.async = true;
     script.defer = true;
+    script.onerror = () => {
+      console.error('Failed to load Google Maps API');
+    };
     document.head.appendChild(script);
   </script>
 </body>

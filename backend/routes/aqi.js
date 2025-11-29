@@ -169,6 +169,98 @@ const malaysianPlaces = [
   },
 ]
 
+// GET /api/aqi - Get AQI for a specific location
+router.get('/', async (req, res) => {
+  try {
+    const { lat, lng } = req.query
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required',
+      })
+    }
+
+    const latitude = parseFloat(lat)
+    const longitude = parseFloat(lng)
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid latitude or longitude values',
+      })
+    }
+
+    // Find nearest place to estimate AQI
+    let nearestPlace = malaysianPlaces[0]
+    let minDistance = calculateDistance(latitude, longitude, nearestPlace.lat, nearestPlace.lng)
+
+    malaysianPlaces.forEach(place => {
+      const distance = calculateDistance(latitude, longitude, place.lat, place.lng)
+      if (distance < minDistance) {
+        minDistance = distance
+        nearestPlace = place
+      }
+    })
+
+    // Generate AQI based on location (simulate real-time AQI)
+    // In production, integrate with a real AQI API like OpenWeatherMap Air Pollution API
+    const hash = Math.floor((latitude * 100 + longitude) % 100)
+    const baseAQI = nearestPlace.aqi
+    const variation = (hash % 20) - 10 // -10 to +10 variation
+    const aqi = Math.max(0, Math.min(300, baseAQI + variation))
+
+    // Determine AQI category and color
+    let aqiCategory, aqiColor
+    if (aqi <= 50) {
+      aqiCategory = 'Good'
+      aqiColor = '#00e400'
+    } else if (aqi <= 100) {
+      aqiCategory = 'Moderate'
+      aqiColor = '#ffff00'
+    } else if (aqi <= 150) {
+      aqiCategory = 'Unhealthy for Sensitive Groups'
+      aqiColor = '#ff7e00'
+    } else if (aqi <= 200) {
+      aqiCategory = 'Unhealthy'
+      aqiColor = '#ff0000'
+    } else if (aqi <= 300) {
+      aqiCategory = 'Very Unhealthy'
+      aqiColor = '#8f3f97'
+    } else {
+      aqiCategory = 'Hazardous'
+      aqiColor = '#7e0023'
+    }
+
+    // Generate PM2.5 and PM10 based on AQI
+    const pm25 = Math.round((aqi / 2) + (hash % 10))
+    const pm10 = Math.round((aqi / 1.5) + (hash % 15))
+
+    res.json({
+      success: true,
+      data: {
+        aqi: Math.round(aqi),
+        aqiCategory,
+        aqiColor,
+        pm25,
+        pm10,
+        location: {
+          lat: latitude,
+          lng: longitude,
+        },
+        timestamp: new Date().toISOString(),
+      },
+    })
+  } catch (error) {
+    console.error('Error fetching AQI:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch AQI data',
+      error: error.message,
+    })
+  }
+})
+
 // GET /api/aqi/places - Get nearby places with good AQI
 router.get('/places', async (req, res) => {
   try {
