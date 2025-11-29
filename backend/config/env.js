@@ -22,6 +22,7 @@ export const env = {
   
   // API Keys (optional)
   MAPBOX_TOKEN: process.env.MAPBOX_TOKEN || '',
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   
   // JWT (if needed in future)
   JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
@@ -48,6 +49,11 @@ export const validateEnv = () => {
       console.log('🗺️  Mapbox Token: Configured')
     } else {
       console.log('⚠️  Mapbox Token: Not configured (optional)')
+    }
+    if (env.GEMINI_API_KEY) {
+      console.log('🤖 Gemini API Key: Configured')
+    } else {
+      console.log('⚠️  Gemini API Key: Not configured (required for AI Advice)')
     }
   }
 }

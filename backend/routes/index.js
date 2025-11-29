@@ -11,6 +11,7 @@ import aqiRoutes from './aqi.js'
 import forumRoutes from './forum.js'
 import surroundingsRoutes from './surroundings.js'
 import weatherRoutes from './weather.js'
+import aiRoutes from './ai.js'
 
 const router = express.Router()
 
@@ -29,6 +30,7 @@ router.use('/aqi', aqiRoutes)
 router.use('/forum', forumRoutes)
 router.use('/surroundings', surroundingsRoutes)
 router.use('/weather', weatherRoutes)
+router.use('/ai', aiRoutes)
 
 export default router
 

@@ -10,7 +10,7 @@ const Navbar = () => {
     { path: "/", label: "Home" },
     { path: "/route-planner", label: "Route Planner" },
     { path: "/air-sos", label: "AirSOS" },
-    { path: "/safe-route", label: "SafeRoute" },
+    { path: "/ai-advice", label: "AI Advice" },
     { path: "/guardian-connect", label: "Guardian" },
     { path: "/settings", label: "Settings" },
   ];

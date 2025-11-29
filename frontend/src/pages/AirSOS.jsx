@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import BreathingAnimation from '../components/BreathingAnimation'
 import api from '../services/api'
 import LoaderAnimation from '../components/LoaderAnimation'
+import { getGuardians } from '../utils/localStorage'
 
 const AirSOS = () => {
   const [emergencyActive, setEmergencyActive] = useState(false)
@@ -61,16 +62,47 @@ const AirSOS = () => {
     window.location.href = 'tel:911' // or your local emergency number
   }
 
-  const handleNotifyGuardians = async () => {
+  const handleNotifyGuardians = () => {
     setLoading(true)
     try {
-      const response = await api.post('/sos/notify-guardians', {
-        location: userLocation,
-        timestamp: new Date().toISOString(),
-      })
+      const guardians = getGuardians()
       
-      if (response.data.success) {
-        alert('Guardians have been notified!')
+      if (guardians.length === 0) {
+        alert('No guardians added. Please add guardians first in the Guardian Connect page.')
+        setLoading(false)
+        return
+      }
+
+      // Create emergency message
+      const locationText = userLocation 
+        ? `My location: https://www.google.com/maps?q=${userLocation.lat},${userLocation.lng}`
+        : 'Location unavailable'
+      
+      const emergencyMessage = `🚨 EMERGENCY ALERT 🚨\n\nI need help!\n\n${locationText}\n\nTime: ${new Date().toLocaleString()}\n\nSent from Routely Emergency SOS`
+
+      // Notify each guardian via WhatsApp if they have a phone number
+      const guardiansWithPhone = guardians.filter(g => g.phone)
+      
+      if (guardiansWithPhone.length === 0) {
+        alert('No guardians with phone numbers found. Please add phone numbers to your guardians.')
+        setLoading(false)
+        return
+      }
+
+      // Open WhatsApp for the first guardian (or you could loop through all)
+      const firstGuardian = guardiansWithPhone[0]
+      const phoneNumber = firstGuardian.phone.replace(/[^\d+]/g, '')
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(emergencyMessage)}`
+      
+      window.open(whatsappUrl, '_blank')
+      
+      // If there are more guardians, alert user
+      if (guardiansWithPhone.length > 1) {
+        setTimeout(() => {
+          alert(`Opening WhatsApp for ${firstGuardian.name}. You may need to manually notify ${guardiansWithPhone.length - 1} other guardian(s).`)
+        }, 500)
+      } else {
+        alert(`Opening WhatsApp to notify ${firstGuardian.name}`)
       }
     } catch (error) {
       console.error('Error notifying guardians:', error)

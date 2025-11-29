@@ -18,6 +18,10 @@ dist/
 build/
 *.log
 
+# Frontend build artifacts
+frontend/dist/
+frontend/.vercel/
+
 # IDE
 .vscode/
 .idea/

@@ -1,15 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts'
-import api from '../services/api'
 import LoaderAnimation from '../components/LoaderAnimation'
 import landingPageImage from '../assets/landingpage.png'
+import { 
+  getForumPosts, 
+  addForumPost, 
+  updateForumPost,
+  deleteForumPost,
+  getCurrentUserId,
+  getCurrentUserName,
+  setCurrentUserName,
+  initializeDefaultData 
+} from '../utils/localStorage'
+import BlurText from '../components/BlurText'
+import TextPressure from '../components/TextPressure'
 
 const Home = () => {
   const [airPollutionData, setAirPollutionData] = useState([])
   const [trafficData, setTrafficData] = useState([])
   const [forumPosts, setForumPosts] = useState([])
   const [newPost, setNewPost] = useState({ title: '', content: '', author: '' })
+  const [editingPost, setEditingPost] = useState(null)
+  const [editPost, setEditPost] = useState({ title: '', content: '' })
+  const [currentUserId] = useState(getCurrentUserId())
+  const [currentUserName, setCurrentUserNameState] = useState(getCurrentUserName())
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [visibleSections, setVisibleSections] = useState(new Set())
@@ -21,7 +36,8 @@ const Home = () => {
 
   useEffect(() => {
     fetchData()
-    fetchForumPosts()
+    initializeDefaultData()
+    loadForumPosts()
   }, [])
 
   // Intersection Observer for scroll animations
@@ -96,91 +112,94 @@ const Home = () => {
     }
   }
 
-  const fetchForumPosts = async () => {
+  const loadForumPosts = () => {
     try {
-      const response = await api.get('/forum/posts')
-      if (response.data.success) {
-        setForumPosts(response.data.data || [])
-      } else {
-        setForumPosts([
-          {
-            _id: '1',
-            title: 'Best Parks for Morning Jogging',
-            content: 'I found that Taman Tasik Titiwangsa has excellent air quality in the mornings. The AQI is usually below 30!',
-            author: 'Sarah M.',
-            createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            likes: 12,
-          },
-          {
-            _id: '2',
-            title: 'Avoiding Peak Traffic Hours',
-            content: 'Traffic congestion is worst between 7-9 AM and 5-7 PM. I plan my routes to avoid these times for better air quality exposure.',
-            author: 'Ahmad K.',
-            createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-            likes: 8,
-          },
-          {
-            _id: '3',
-            title: 'Indoor Air Quality Tips',
-            content: 'Using air purifiers and keeping windows closed during high pollution days really helps. Also, plants like peace lilies are great!',
-            author: 'Lisa T.',
-            createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-            likes: 15,
-          },
-        ])
-      }
+      const posts = getForumPosts()
+      setForumPosts(posts)
     } catch (error) {
-      console.error('Error fetching forum posts:', error)
-      setForumPosts([
-        {
-          _id: '1',
-          title: 'Best Parks for Morning Jogging',
-          content: 'I found that Taman Tasik Titiwangsa has excellent air quality in the mornings. The AQI is usually below 30!',
-          author: 'Sarah M.',
-          createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          likes: 12,
-        },
-        {
-          _id: '2',
-          title: 'Avoiding Peak Traffic Hours',
-          content: 'Traffic congestion is worst between 7-9 AM and 5-7 PM. I plan my routes to avoid these times for better air quality exposure.',
-          author: 'Ahmad K.',
-          createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-          likes: 8,
-        },
-      ])
+      console.error('Error loading forum posts:', error)
+      setForumPosts([])
     }
   }
 
-  const handleSubmitPost = async (e) => {
+  const handleSubmitPost = (e) => {
     e.preventDefault()
     if (!newPost.title || !newPost.content) return
 
     setSubmitting(true)
     try {
-      const response = await api.post('/forum/posts', {
-        ...newPost,
-        author: newPost.author || 'Anonymous',
-      })
-
-      if (response.data.success) {
-        setNewPost({ title: '', content: '', author: '' })
-        fetchForumPosts()
+      const authorName = newPost.author.trim() || 'Anonymous'
+      
+      // Save user name for future posts
+      if (authorName !== 'Anonymous') {
+        setCurrentUserName(authorName)
+        setCurrentUserNameState(authorName)
       }
+
+      const post = {
+        title: newPost.title.trim(),
+        content: newPost.content.trim(),
+        author: authorName,
+      }
+
+      addForumPost(post)
+      setNewPost({ title: '', content: '', author: '' })
+      loadForumPosts()
     } catch (error) {
       console.error('Error submitting post:', error)
-      const post = {
-        _id: Date.now().toString(),
-        ...newPost,
-        author: newPost.author || 'Anonymous',
-        createdAt: new Date().toISOString(),
-        likes: 0,
-      }
-      setForumPosts([post, ...forumPosts])
-      setNewPost({ title: '', content: '', author: '' })
+      alert('Failed to submit post. Please try again.')
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleEditPost = (post) => {
+    setEditingPost(post._id)
+    setEditPost({ title: post.title, content: post.content })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingPost(null)
+    setEditPost({ title: '', content: '' })
+  }
+
+  const handleUpdatePost = (postId) => {
+    if (!editPost.title || !editPost.content) return
+
+    try {
+      updateForumPost(postId, {
+        title: editPost.title.trim(),
+        content: editPost.content.trim(),
+      })
+      setEditingPost(null)
+      setEditPost({ title: '', content: '' })
+      loadForumPosts()
+    } catch (error) {
+      console.error('Error updating post:', error)
+      alert('Failed to update post. Please try again.')
+    }
+  }
+
+  const handleDeletePost = (postId) => {
+    if (window.confirm('Are you sure you want to delete this post?')) {
+      try {
+        deleteForumPost(postId)
+        loadForumPosts()
+      } catch (error) {
+        console.error('Error deleting post:', error)
+        alert('Failed to delete post. Please try again.')
+      }
+    }
+  }
+
+  const isMyPost = (post) => {
+    // Allow editing/deleting:
+    // 1. Own posts (userId matches current user)
+    // 2. Default system posts (system_default)
+    // 3. Posts without userId (legacy posts - allow editing)
+    return post.userId === currentUserId || 
+           post.userId === 'system_default' || 
+           !post.userId
   }
 
   const formatTimeAgo = (dateString) => {
@@ -208,12 +227,29 @@ const Home = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
             {/* Left Side - Text Content */}
             <div className="text-left">
-              <h1 className="xl:-mt-32 text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 mb-6 leading-tight">
-                Routely
-              </h1>
-              <p className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-800 mb-4 leading-tight">
-                Smart, Safe, and Stress-Free Urban Travel
-              </p>
+              <BlurText
+                text="Routely"
+                className="xl:-mt-32 text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 mb-6 leading-tight"
+                animateBy="characters"
+                direction="top"
+                delay={50}
+                stepDuration={0.3}
+              />
+              <div className="mb-4 leading-tight">
+                <TextPressure
+                  text="Smart, Safe, and Stress-Free Urban Travel"
+                  flex={true}
+                  alpha={false}
+                  stroke={false}
+                  width={true}
+                  weight={true}
+                  italic={true}
+                  textColor="#1f2937"
+                  strokeColor="#3b82f6"
+                  minFontSize={24}
+                  className="text-2xl md:text-3xl lg:text-4xl font-bold"
+                />
+              </div>
               <p className="text-lg md:text-xl lg:text-2xl text-gray-600 mb-8 font-medium">
                 Your city. Your route. Your safety – all in one app
               </p>
@@ -225,10 +261,10 @@ const Home = () => {
                   Plan Route
                 </Link>
                 <Link 
-                  to="/safe-route" 
+                  to="/ai-advice" 
                   className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-lg px-8 py-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl text-center"
                 >
-                  Find Safe Route
+                  Get AI Advice
                 </Link>
               </div>
             </div>
@@ -372,7 +408,13 @@ const Home = () => {
                 type="text"
                 placeholder="Your name (optional)"
                 value={newPost.author}
-                onChange={(e) => setNewPost({ ...newPost, author: e.target.value })}
+                onChange={(e) => {
+                  setNewPost({ ...newPost, author: e.target.value })
+                  if (e.target.value) {
+                    setCurrentUserName(e.target.value)
+                    setCurrentUserNameState(e.target.value)
+                  }
+                }}
                 className="input-field mb-3"
               />
               <input
@@ -408,25 +450,97 @@ const Home = () => {
           ) : (
             forumPosts.map((post) => (
               <div key={post._id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900 mb-1">{post.title}</h4>
-                    <p className="text-sm text-gray-600 mb-2">{post.content}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>By {post.author}</span>
-                      <span>•</span>
-                      <span>{formatTimeAgo(post.createdAt)}</span>
+                {editingPost === post._id ? (
+                  /* Edit Mode */
+                  <div className="space-y-4">
+                    <input
+                      type="text"
+                      value={editPost.title}
+                      onChange={(e) => setEditPost({ ...editPost, title: e.target.value })}
+                      className="input-field w-full"
+                      placeholder="Post title..."
+                    />
+                    <textarea
+                      value={editPost.content}
+                      onChange={(e) => setEditPost({ ...editPost, content: e.target.value })}
+                      className="input-field w-full min-h-[100px]"
+                      placeholder="Post content..."
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleUpdatePost(post._id)}
+                        className="btn-primary text-sm px-4 py-2"
+                      >
+                        Save Changes
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="btn-secondary text-sm px-4 py-2"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <button className="text-gray-400 hover:text-red-500 transition-colors">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                      </svg>
-                    </button>
-                    <span className="text-sm text-gray-600">{post.likes || 0}</span>
+                ) : (
+                  /* View Mode */
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 mb-1">{post.title}</h4>
+                      <p className="text-sm text-gray-600 mb-2 whitespace-pre-wrap">{post.content}</p>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        {!post.updatedAt && (
+                          <>
+                            <span>By {post.author}</span>
+                            <span>•</span>
+                          </>
+                        )}
+                        <span>{formatTimeAgo(post.createdAt)}</span>
+                        {post.updatedAt && (
+                          <>
+                            <span>•</span>
+                            <span className="italic">Edited {formatTimeAgo(post.updatedAt)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 ml-4">
+                      {/* Edit/Delete buttons for own posts */}
+                      {isMyPost(post) && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditPost(post)}
+                            className="text-blue-500 hover:text-blue-700 transition-colors p-1"
+                            title="Edit post"
+                            aria-label="Edit post"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeletePost(post._id)}
+                            className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            title="Delete post"
+                            aria-label="Delete post"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                      {/* Like button */}
+                      <div className="flex items-center gap-1">
+                        <button className="text-gray-400 hover:text-red-500 transition-colors">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        </button>
+                        <span className="text-sm text-gray-600">{post.likes || 0}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))
           )}
