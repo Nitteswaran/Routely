@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import MapView from '../components/MapView'
 import LoaderAnimation from '../components/LoaderAnimation'
 import { 
@@ -24,6 +24,10 @@ const GuardianConnect = () => {
   const [formErrors, setFormErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
+  const [lastSentTime, setLastSentTime] = useState(null)
+  const locationWatchIdRef = useRef(null)
+  const locationUpdateIntervalRef = useRef(null)
+  const currentLocationRef = useRef(null)
 
   // Initialize default data and fetch guardians on mount
   useEffect(() => {
@@ -206,10 +210,132 @@ const GuardianConnect = () => {
     window.open(whatsappUrl, '_blank')
   }
 
-  const handleShareLocation = () => {
-    setSharingLocation(!sharingLocation)
-    // In real app, this would trigger location sharing via Socket.IO
+  const sendLocationToGuardians = (location) => {
+    const guardians = getGuardians()
+    if (guardians.length === 0) {
+      alert('No guardians added. Please add at least one guardian first.')
+      return
+    }
+
+    const locationUrl = `https://www.google.com/maps?q=${location.lat},${location.lng}`
+    const timestamp = new Date()
+    const locationMessage = `📍 My current location:\n${locationUrl}\n\nCoordinates: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}\nTime: ${timestamp.toLocaleString()}`
+
+    // Send to each guardian with phone number via WhatsApp
+    guardians.forEach((guardian, index) => {
+      if (guardian.phone) {
+        // Clean phone number
+        let phoneNumber = guardian.phone.replace(/[^\d+]/g, '')
+        
+        // Remove leading 0 if present and add country code if needed
+        if (phoneNumber.startsWith('0')) {
+          phoneNumber = phoneNumber.substring(1)
+        }
+        
+        // Ensure it starts with country code (add +60 for Malaysia if no +)
+        if (!phoneNumber.startsWith('+')) {
+          phoneNumber = '+60' + phoneNumber
+        }
+
+        // Create WhatsApp URL with location message
+        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(locationMessage)}`
+        
+        // Open WhatsApp in new tab (delay slightly for multiple guardians)
+        setTimeout(() => {
+          window.open(whatsappUrl, '_blank')
+        }, index * 500) // Stagger by 500ms to avoid popup blockers
+      }
+    })
+
+    // Update last sent time
+    setLastSentTime(timestamp)
   }
+
+  const handleShareLocation = () => {
+    if (!sharingLocation) {
+      // Start sharing
+      if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser')
+        return
+      }
+
+      // Request permission and get initial location
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          }
+          setUserLocation(location)
+          setSharingLocation(true)
+          
+          // Send initial location
+          sendLocationToGuardians(location)
+          
+          // Store current location in ref
+          currentLocationRef.current = location
+          
+          // Watch position for updates
+          locationWatchIdRef.current = navigator.geolocation.watchPosition(
+            (position) => {
+              const newLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+              }
+              setUserLocation(newLocation)
+              currentLocationRef.current = newLocation
+            },
+            (error) => {
+              console.error('Error watching position:', error)
+              alert('Error tracking location. Please check your location permissions.')
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0,
+            }
+          )
+          
+          // Send location updates every 30 seconds
+          locationUpdateIntervalRef.current = setInterval(() => {
+            if (currentLocationRef.current) {
+              sendLocationToGuardians(currentLocationRef.current)
+            }
+          }, 30000) // Update every 30 seconds
+        },
+        (error) => {
+          console.error('Error getting location:', error)
+          alert('Failed to get your location. Please enable location permissions.')
+        }
+      )
+    } else {
+      // Stop sharing
+      if (locationWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchIdRef.current)
+        locationWatchIdRef.current = null
+      }
+      
+      if (locationUpdateIntervalRef.current !== null) {
+        clearInterval(locationUpdateIntervalRef.current)
+        locationUpdateIntervalRef.current = null
+      }
+      
+      setSharingLocation(false)
+      currentLocationRef.current = null
+    }
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (locationWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchIdRef.current)
+      }
+      if (locationUpdateIntervalRef.current !== null) {
+        clearInterval(locationUpdateIntervalRef.current)
+      }
+    }
+  }, [])
 
   const getRelationshipIcon = (relationship) => {
     const icons = {
@@ -229,22 +355,42 @@ const GuardianConnect = () => {
       </div>
 
       {/* Location Sharing Toggle */}
-      <div className="card">
+      <div className={`card ${sharingLocation ? 'border-2 border-green-500 bg-green-50' : ''}`}>
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold mb-1">Location Sharing</h2>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-xl font-semibold">Location Sharing</h2>
+              {sharingLocation && (
+                <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
+                  <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></span>
+                  Live
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-600">
               {sharingLocation
-                ? 'Your location is being shared with guardians'
-                : 'Location sharing is off'}
+                ? `Your location is being shared with ${guardians.length} guardian${guardians.length !== 1 ? 's' : ''}. Updates sent every 30 seconds.`
+                : 'Share your live location with your guardians'}
             </p>
+            {sharingLocation && userLocation && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-gray-500">
+                  Current: {userLocation.lat.toFixed(6)}, {userLocation.lng.toFixed(6)}
+                </p>
+                {lastSentTime && (
+                  <p className="text-xs text-green-600 font-medium">
+                    ✓ Last sent: {lastSentTime.toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <button
             onClick={handleShareLocation}
             className={`px-6 py-3 rounded-lg font-medium transition-colors ${
               sharingLocation
-                ? 'bg-green-600 hover:bg-green-700 text-white'
-                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
           >
             {sharingLocation ? 'Stop Sharing' : 'Start Sharing'}
