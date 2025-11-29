@@ -85,6 +85,7 @@ const AIAdvice = () => {
           role: 'assistant',
           content: response.data.data.response,
           timestamp: new Date().toISOString(),
+          fallback: response.data.data.fallback || false,
         }
         setMessages((prev) => [...prev, aiMessage])
       } else {
@@ -332,6 +333,14 @@ const AIAdvice = () => {
                           <span className="text-xs font-semibold text-gray-700">
                             {message.role === 'user' ? 'You' : 'AI Assistant'}
                           </span>
+                          {message.fallback && (
+                            <>
+                              <span className="text-xs text-gray-400">•</span>
+                              <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded">
+                                Offline Mode
+                              </span>
+                            </>
+                          )}
                           <span className="text-xs text-gray-400">•</span>
                           <span className="text-xs text-gray-500">
                             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -461,7 +470,7 @@ const AIAdvice = () => {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Powered by Google Gemini AI • Press Enter to send, Shift+Enter for new line
+                Powered by Google Gemini AI • Automatic fallback available • Press Enter to send, Shift+Enter for new line
               </p>
             </div>
           </div>
