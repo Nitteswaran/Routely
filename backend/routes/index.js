@@ -13,6 +13,11 @@ import surroundingsRoutes from './surroundings.js'
 import weatherRoutes from './weather.js'
 import aiRoutes from './ai.js'
 import trafficRoutes from './traffic.js'
+import incidentsRoutes from './incidents.js'
+import authRoutes from './auth.js'
+import journalRoutes from './journal.js'
+import leaderboardRoutes from './leaderboard.js'
+import achievementsRoutes from './achievements.js'
 
 const router = express.Router()
 
@@ -33,6 +38,11 @@ router.use('/surroundings', surroundingsRoutes)
 router.use('/weather', weatherRoutes)
 router.use('/ai', aiRoutes)
 router.use('/traffic', trafficRoutes)
+router.use('/incidents', incidentsRoutes)
+router.use('/auth', authRoutes)
+router.use('/journal', journalRoutes)
+router.use('/leaderboard', leaderboardRoutes)
+router.use('/achievements', achievementsRoutes)
 
 export default router
 

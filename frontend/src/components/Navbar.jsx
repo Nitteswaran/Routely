@@ -1,18 +1,48 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import routelyLogo from "../assets/routelylogo.jpg";
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
 
-  const navItems = [
+  useEffect(() => {
+    checkAuth();
+  }, [location]);
+
+  const checkAuth = () => {
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    setIsAuthenticated(!!token);
+    setUser(userData ? JSON.parse(userData) : null);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setIsAuthenticated(false);
+    setUser(null);
+    navigate('/');
+  };
+
+  const publicNavItems = [
+    { path: "/", label: "Home" },
+  ];
+
+  const authenticatedNavItems = [
     { path: "/", label: "Home" },
     { path: "/route-planner", label: "Route Planner" },
     { path: "/air-sos", label: "AirSOS" },
     { path: "/ai-advice", label: "AI Advice" },
-    { path: "/guardian-connect", label: "Guardian" },
+    { path: "/leaderboard", label: "Leaderboard" },
+    { path: "/dashboard", label: "Dashboard" },
+    { path: "/achievements", label: "Achievements" },
   ];
+
+  const navItems = isAuthenticated ? authenticatedNavItems : publicNavItems;
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -82,7 +112,7 @@ const Navbar = () => {
             </button>
 
             {/* Desktop nav */}
-            <div className="hidden md:flex space-x-1">
+            <div className="hidden md:flex items-center space-x-1">
               {navItems.map((item) => {
                 const active = location.pathname === item.path;
                 return (
@@ -97,6 +127,29 @@ const Navbar = () => {
                   </Link>
                 );
               })}
+              {isAuthenticated ? (
+                <button
+                  onClick={handleLogout}
+                  className="ml-4 px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+                >
+                  Logout
+                </button>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="ml-4 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="px-4 py-2 rounded-lg text-sm font-medium border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -179,6 +232,31 @@ const Navbar = () => {
                 </Link>
               );
             })}
+            {isAuthenticated ? (
+              <button
+                onClick={handleLogout}
+                className="block w-full text-left px-4 py-3.5 rounded-xl text-base font-medium bg-red-500 text-white hover:bg-red-600 transition-colors mt-4"
+              >
+                Logout
+              </button>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full text-left px-4 py-3.5 rounded-xl text-base font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/register"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full text-left px-4 py-3.5 rounded-xl text-base font-medium border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* Mobile menu footer */}

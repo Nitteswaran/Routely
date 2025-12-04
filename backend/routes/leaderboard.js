@@ -1,0 +1,11 @@
+import express from 'express'
+import { getLeaderboard, getMyRank } from '../controllers/leaderboardController.js'
+import { protect } from '../middleware/auth.js'
+
+const router = express.Router()
+
+router.get('/', getLeaderboard)
+router.get('/me', protect, getMyRank)
+
+export default router
+

@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
+import api from '../services/api'
 
 // Google Maps API key - should be in environment variable
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+
+// Incident type colors
+const INCIDENT_COLORS = {
+  'Air Pollution': '#10b981', // green
+  'Flood': '#3b82f6', // blue
+  'Road Block': '#ef4444', // red
+  'Accident': '#eab308', // yellow
+  'Other': '#6b7280', // gray
+}
 
 const GoogleMapView = ({
   center = { lat: 3.1390, lng: 101.6869 }, // Default: Kuala Lumpur
@@ -12,14 +22,22 @@ const GoogleMapView = ({
   origin = null,
   destination = null,
   onRouteLoad = null,
+  isReportingMode = false,
+  onMapClick = null,
+  showIncidents = true,
+  refreshIncidents = false,
+  onIncidentDelete = null,
 }) => {
   const mapContainer = useRef(null)
   const map = useRef(null)
   const directionsService = useRef(null)
   const directionsRenderer = useRef(null)
+  const incidentMarkersRef = useRef([])
+  const infoWindowsRef = useRef([])
   const [mapLoaded, setMapLoaded] = useState(false)
   const [scriptLoaded, setScriptLoaded] = useState(false)
   const [error, setError] = useState(null)
+  const [incidents, setIncidents] = useState([])
 
   // Load Google Maps script
   useEffect(() => {
@@ -203,6 +221,185 @@ const GoogleMapView = ({
     })
   }, [mapLoaded, origin, destination, onRouteLoad])
 
+  // Fetch and display incidents
+  useEffect(() => {
+    if (!mapLoaded || !map.current || !showIncidents) return
+
+    const fetchIncidents = async () => {
+      try {
+        const response = await api.get('/incidents')
+        if (response.data.success) {
+          setIncidents(response.data.data || [])
+        }
+      } catch (error) {
+        console.error('Error fetching incidents:', error)
+      }
+    }
+
+    fetchIncidents()
+  }, [mapLoaded, showIncidents, refreshIncidents])
+
+  // Display incident markers
+  useEffect(() => {
+    if (!mapLoaded || !map.current || !window.google || incidents.length === 0) return
+
+    // Clear existing markers and info windows
+    incidentMarkersRef.current.forEach((marker) => {
+      marker.setMap(null)
+    })
+    infoWindowsRef.current.forEach((infoWindow) => {
+      infoWindow.close()
+    })
+    incidentMarkersRef.current = []
+    infoWindowsRef.current = []
+
+    // Create markers for each incident
+    incidents.forEach((incident) => {
+      const color = INCIDENT_COLORS[incident.type] || INCIDENT_COLORS['Other']
+      
+      // Create custom marker icon
+      const markerIcon = {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: 2,
+      }
+
+      const marker = new window.google.maps.Marker({
+        position: { lat: incident.lat, lng: incident.lng },
+        map: map.current,
+        icon: markerIcon,
+        title: incident.type,
+      })
+
+      // Create info window content
+      const formatDate = (dateString) => {
+        const date = new Date(dateString)
+        return date.toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      }
+
+      // Create info window content HTML
+      const infoContent = `
+        <div style="padding: 8px; min-width: 200px;">
+          <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold; color: #1f2937;">
+            ${incident.type}
+          </h3>
+          ${incident.description ? `<p style="margin: 0 0 8px 0; color: #4b5563; font-size: 14px;">${incident.description}</p>` : ''}
+          <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 12px;">
+            ${formatDate(incident.timestamp || incident.createdAt)}
+          </p>
+          ${onIncidentDelete ? `
+            <button 
+              id="delete-incident-${incident._id}" 
+              style="
+                width: 100%;
+                padding: 6px 12px;
+                background-color: #ef4444;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background-color 0.2s;
+              "
+              onmouseover="this.style.backgroundColor='#dc2626'"
+              onmouseout="this.style.backgroundColor='#ef4444'"
+            >
+              Delete Incident
+            </button>
+          ` : ''}
+        </div>
+      `
+
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: infoContent,
+      })
+
+      // Add delete button click handler when info window content is loaded
+      if (onIncidentDelete) {
+        infoWindow.addListener('domready', () => {
+          const deleteBtn = document.getElementById(`delete-incident-${incident._id}`)
+          if (deleteBtn) {
+            deleteBtn.addEventListener('click', (e) => {
+              e.stopPropagation()
+              if (window.confirm('Are you sure you want to delete this incident?')) {
+                onIncidentDelete(incident._id)
+                infoWindow.close()
+              }
+            })
+          }
+        })
+      }
+
+      // Add click listener to marker
+      marker.addListener('click', () => {
+        // Close all other info windows
+        infoWindowsRef.current.forEach((iw) => iw.close())
+        infoWindow.open(map.current, marker)
+      })
+
+      incidentMarkersRef.current.push(marker)
+      infoWindowsRef.current.push(infoWindow)
+    })
+
+    // Cleanup function
+    return () => {
+      incidentMarkersRef.current.forEach((marker) => {
+        marker.setMap(null)
+      })
+      infoWindowsRef.current.forEach((infoWindow) => {
+        infoWindow.close()
+      })
+    }
+  }, [mapLoaded, incidents])
+
+  // Manage click listener and cursor style for incident reporting
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return
+
+    let clickListener = null
+
+    if (isReportingMode && onMapClick) {
+      // Set crosshair cursor
+      map.current.setOptions({ draggableCursor: 'crosshair' })
+      
+      // Add click listener
+      clickListener = map.current.addListener('click', (event) => {
+        console.log('Map clicked in reporting mode:', event)
+        if (event.latLng) {
+          const coords = {
+            lat: event.latLng.lat(),
+            lng: event.latLng.lng(),
+          }
+          console.log('Calling onMapClick with coordinates:', coords)
+          onMapClick(coords)
+        }
+      })
+      console.log('✅ Click listener added for incident reporting')
+    } else {
+      // Reset cursor
+      map.current.setOptions({ draggableCursor: null })
+      console.log('❌ Click listener removed (not in reporting mode)')
+    }
+
+    // Cleanup: remove listener when component unmounts or dependencies change
+    return () => {
+      if (clickListener) {
+        window.google.maps.event.removeListener(clickListener)
+        console.log('🧹 Click listener cleaned up')
+      }
+    }
+  }, [mapLoaded, isReportingMode, onMapClick])
+
   // Show warning if no API key
   if (!GOOGLE_MAPS_API_KEY) {
     return (
@@ -235,7 +432,17 @@ const GoogleMapView = ({
 
   return (
     <div className={`w-full rounded-lg overflow-hidden shadow-md relative ${className}`} style={{ height }}>
-      <div ref={mapContainer} style={{ width: '100%', height: '100%', minHeight: '400px' }} />
+      <div 
+        ref={mapContainer} 
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          minHeight: '400px',
+          pointerEvents: 'auto',
+          position: 'relative',
+          zIndex: 1
+        }} 
+      />
       {!scriptLoaded && GOOGLE_MAPS_API_KEY && (
         <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
           <div className="text-center">
@@ -251,8 +458,19 @@ const GoogleMapView = ({
         </div>
       )}
       {mapLoaded && (
-        <div className="absolute top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded-lg text-xs z-10">
+        <div 
+          className="absolute top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded-lg text-xs z-10"
+          style={{ pointerEvents: 'none' }}
+        >
           ✓ Map Loaded
+        </div>
+      )}
+      {isReportingMode && mapLoaded && (
+        <div 
+          className="absolute top-4 left-4 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-2 rounded-lg text-sm z-10 max-w-xs"
+          style={{ pointerEvents: 'none' }}
+        >
+          <p className="font-semibold">📍 Click on the map to select incident location</p>
         </div>
       )}
     </div>

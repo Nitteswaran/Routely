@@ -24,10 +24,9 @@ const api = axios.create({
   timeout: 10000, // 10 second timeout (can be overridden per request)
 })
 
-// Request interceptor
+// Request interceptor - Add auth token from localStorage
 api.interceptors.request.use(
   (config) => {
-    // Add auth token if available
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`

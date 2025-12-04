@@ -4,6 +4,8 @@ import MultipleDestinations from '../components/MultipleDestinations'
 import RouteSummaryCard from '../components/RouteSummaryCard'
 import DestinationWeatherCard from '../components/DestinationWeatherCard'
 import LoaderAnimation from '../components/LoaderAnimation'
+import ReportIncidentButton from '../components/ReportIncidentButton'
+import IncidentReportModal from '../components/IncidentReportModal'
 import api from '../services/api'
 import { calculateSafetyScore } from '../utils/safetyScore'
 
@@ -19,6 +21,10 @@ const RoutePlanner = () => {
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0)
   const [viewMode, setViewMode] = useState('single') // 'single' or 'commutes'
   const [destinationCoords, setDestinationCoords] = useState(null)
+  const [isReportingMode, setIsReportingMode] = useState(false)
+  const [showIncidentModal, setShowIncidentModal] = useState(false)
+  const [selectedLocation, setSelectedLocation] = useState(null)
+  const [refreshIncidents, setRefreshIncidents] = useState(0)
 
   // Get user's current location
   useEffect(() => {
@@ -177,6 +183,44 @@ const RoutePlanner = () => {
     return 'red'
   }
 
+  // Incident reporting handlers
+  const handleReportIncidentClick = () => {
+    setIsReportingMode(!isReportingMode)
+    if (isReportingMode) {
+      setSelectedLocation(null)
+      setShowIncidentModal(false)
+    }
+  }
+
+  const handleMapClick = (coordinates) => {
+    console.log('handleMapClick called with:', coordinates, 'isReportingMode:', isReportingMode)
+    setSelectedLocation(coordinates)
+    setShowIncidentModal(true)
+    setIsReportingMode(false) // Exit reporting mode after selecting location
+  }
+
+  const handleIncidentSubmitted = (newIncident) => {
+    // Refresh incidents by updating the refresh trigger
+    console.log('Incident submitted:', newIncident)
+    setRefreshIncidents(prev => prev + 1)
+  }
+
+  const handleIncidentDelete = async (incidentId) => {
+    try {
+      const response = await api.delete(`/incidents/${incidentId}`)
+      if (response.data.success) {
+        console.log('Incident deleted successfully')
+        // Refresh incidents by updating the refresh trigger
+        setRefreshIncidents(prev => prev + 1)
+      } else {
+        alert('Failed to delete incident. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error deleting incident:', error)
+      alert(error.response?.data?.message || 'Failed to delete incident. Please try again.')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -304,7 +348,7 @@ const RoutePlanner = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 relative">
             <GoogleMapView
               center={userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : { lat: 3.1390, lng: 101.6869 }}
               zoom={13}
@@ -313,6 +357,15 @@ const RoutePlanner = () => {
               destination={getDestination()}
               route={route}
               onRouteLoad={handleRouteLoad}
+              isReportingMode={isReportingMode}
+              onMapClick={handleMapClick}
+              showIncidents={true}
+              refreshIncidents={refreshIncidents}
+              onIncidentDelete={handleIncidentDelete}
+            />
+            <ReportIncidentButton
+              onClick={handleReportIncidentClick}
+              isActive={isReportingMode}
             />
           </div>
           <div>
@@ -359,6 +412,17 @@ const RoutePlanner = () => {
           coordinates={destinationCoords}
         />
       )}
+
+      {/* Incident Report Modal */}
+      <IncidentReportModal
+        isOpen={showIncidentModal}
+        onClose={() => {
+          setShowIncidentModal(false)
+          setSelectedLocation(null)
+        }}
+        coordinates={selectedLocation}
+        onSuccess={handleIncidentSubmitted}
+      />
     </div>
   )
 }
