@@ -1,14 +1,13 @@
 import express from 'express'
 import Guardian from '../models/Guardian.js'
+import { protect } from '../middleware/auth.js'
 
 const router = express.Router()
 
 // GET /api/guardians - Get all guardians for current user
-router.get('/', async (req, res) => {
+router.get('/', protect, async (req, res) => {
   try {
-    // TODO: In production, get userId from authenticated session
-    // For now, using a default userId or from query params
-    const userId = req.query.userId || req.user?.id || 'default-user-id'
+    const userId = req.user._id.toString()
 
     const guardians = await Guardian.find({ 
       userId,
@@ -31,7 +30,7 @@ router.get('/', async (req, res) => {
 })
 
 // POST /api/guardians - Create a new guardian
-router.post('/', async (req, res) => {
+router.post('/', protect, async (req, res) => {
   try {
     const { name, phone, email, relationship } = req.body
 
@@ -81,8 +80,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // TODO: In production, get userId from authenticated session
-    const userId = req.body.userId || req.user?.id || 'default-user-id'
+    const userId = req.user._id.toString()
 
     // Check if guardian already exists (same phone or email)
     const existingGuardian = await Guardian.findOne({
@@ -155,11 +153,10 @@ router.post('/', async (req, res) => {
 })
 
 // DELETE /api/guardians/:id - Delete a guardian
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
   try {
     const { id } = req.params
-    // TODO: In production, get userId from authenticated session
-    const userId = req.query.userId || req.user?.id || 'default-user-id'
+    const userId = req.user._id.toString()
 
     const guardian = await Guardian.findOne({ _id: id, userId })
 

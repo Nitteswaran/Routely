@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import BreathingAnimation from '../components/BreathingAnimation'
 import api from '../services/api'
 import LoaderAnimation from '../components/LoaderAnimation'
-import { getGuardians } from '../utils/localStorage'
 
 const AirSOS = () => {
   const [emergencyActive, setEmergencyActive] = useState(false)
@@ -13,6 +12,17 @@ const AirSOS = () => {
   const [safeSpots, setSafeSpots] = useState([])
   const [trackingActive, setTrackingActive] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
+  const [showGuardianModal, setShowGuardianModal] = useState(false)
+  const [guardians, setGuardians] = useState([])
+  const [loadingGuardians, setLoadingGuardians] = useState(false)
+  const [showAddGuardianForm, setShowAddGuardianForm] = useState(false)
+  const [guardianForm, setGuardianForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    relationship: 'other',
+  })
+  const [submittingGuardian, setSubmittingGuardian] = useState(false)
   const navigate = useNavigate()
 
   // Get user location on mount (optional, for initial display)
@@ -69,53 +79,98 @@ const AirSOS = () => {
     window.location.href = 'tel:911' // or your local emergency number
   }
 
-  const handleNotifyGuardians = () => {
-    setLoading(true)
+  const fetchGuardians = async () => {
+    setLoadingGuardians(true)
     try {
-      const guardians = getGuardians()
+      const response = await api.get('/guardians')
       
-      if (guardians.length === 0) {
-        alert('No guardians added. Please add guardians first in the Guardian Connect page.')
-        setLoading(false)
-        return
+      if (response.data.success) {
+        setGuardians(response.data.data || [])
+        setShowAddGuardianForm(response.data.data.length === 0)
       }
+    } catch (error) {
+      console.error('Error fetching guardians:', error)
+      // If no guardians, show add form
+      setGuardians([])
+      setShowAddGuardianForm(true)
+    } finally {
+      setLoadingGuardians(false)
+    }
+  }
 
+  const handleNotifyGuardians = () => {
+    setShowGuardianModal(true)
+    fetchGuardians()
+  }
+
+  const handleAddGuardian = async (e) => {
+    e.preventDefault()
+    setSubmittingGuardian(true)
+    
+    try {
+      const response = await api.post('/guardians', guardianForm)
+      
+      if (response.data.success) {
+        setGuardianForm({ name: '', phone: '', email: '', relationship: 'other' })
+        setShowAddGuardianForm(false)
+        await fetchGuardians() // Reload guardians list
+        alert('Guardian added successfully!')
+      }
+    } catch (error) {
+      console.error('Error adding guardian:', error)
+      alert(error.response?.data?.message || 'Failed to add guardian. Please try again.')
+    } finally {
+      setSubmittingGuardian(false)
+    }
+  }
+
+  const handleNotifySingleGuardian = async (guardian) => {
+    if (!guardian.phone) {
+      alert(`${guardian.name} does not have a phone number. Cannot send WhatsApp message.`)
+      return
+    }
+
+    // Get current location
+    const getCurrentLocation = () => {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('Geolocation not supported'))
+          return
+        }
+        
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            })
+          },
+          (error) => {
+            resolve(userLocation) // Fallback to stored location
+          },
+          { enableHighAccuracy: true, timeout: 5000 }
+        )
+      })
+    }
+
+    try {
+      const location = await getCurrentLocation()
+      
       // Create emergency message
-      const locationText = userLocation 
-        ? `My location: https://www.google.com/maps?q=${userLocation.lat},${userLocation.lng}`
+      const locationText = location
+        ? `My location: https://www.google.com/maps?q=${location.lat},${location.lng}`
         : 'Location unavailable'
       
       const emergencyMessage = `🚨 EMERGENCY ALERT 🚨\n\nI need help!\n\n${locationText}\n\nTime: ${new Date().toLocaleString()}\n\nSent from Routely Emergency SOS`
 
-      // Notify each guardian via WhatsApp if they have a phone number
-      const guardiansWithPhone = guardians.filter(g => g.phone)
-      
-      if (guardiansWithPhone.length === 0) {
-        alert('No guardians with phone numbers found. Please add phone numbers to your guardians.')
-        setLoading(false)
-        return
-      }
-
-      // Open WhatsApp for the first guardian (or you could loop through all)
-      const firstGuardian = guardiansWithPhone[0]
-      const phoneNumber = firstGuardian.phone.replace(/[^\d+]/g, '')
+      const phoneNumber = guardian.phone.replace(/[^\d+]/g, '')
       const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(emergencyMessage)}`
       
       window.open(whatsappUrl, '_blank')
-      
-      // If there are more guardians, alert user
-      if (guardiansWithPhone.length > 1) {
-        setTimeout(() => {
-          alert(`Opening WhatsApp for ${firstGuardian.name}. You may need to manually notify ${guardiansWithPhone.length - 1} other guardian(s).`)
-        }, 500)
-      } else {
-        alert(`Opening WhatsApp to notify ${firstGuardian.name}`)
-      }
+      setShowGuardianModal(false)
     } catch (error) {
-      console.error('Error notifying guardians:', error)
-      alert('Failed to notify guardians. Please try again.')
-    } finally {
-      setLoading(false)
+      console.error('Error notifying guardian:', error)
+      alert('Failed to notify guardian. Please try again.')
     }
   }
 
@@ -493,6 +548,210 @@ const AirSOS = () => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
           <div className="bg-white rounded-xl p-8">
             <LoaderAnimation text={loadingMessage} />
+          </div>
+        </div>
+      )}
+
+      {/* Guardian Modal */}
+      {showGuardianModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">
+                {showAddGuardianForm ? 'Add Guardian' : 'Notify Guardians'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowGuardianModal(false)
+                  setShowAddGuardianForm(false)
+                  setGuardianForm({ name: '', phone: '', email: '', relationship: 'other' })
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              {loadingGuardians ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoaderAnimation text="Loading guardians..." />
+                </div>
+              ) : showAddGuardianForm ? (
+                // Add Guardian Form
+                <form onSubmit={handleAddGuardian} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={guardianForm.name}
+                      onChange={(e) => setGuardianForm({ ...guardianForm, name: e.target.value })}
+                      className="input-field"
+                      placeholder="Guardian's full name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={guardianForm.phone}
+                      onChange={(e) => setGuardianForm({ ...guardianForm, phone: e.target.value })}
+                      className="input-field"
+                      placeholder="+1234567890"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={guardianForm.email}
+                      onChange={(e) => setGuardianForm({ ...guardianForm, email: e.target.value })}
+                      className="input-field"
+                      placeholder="guardian@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Relationship
+                    </label>
+                    <select
+                      value={guardianForm.relationship}
+                      onChange={(e) => setGuardianForm({ ...guardianForm, relationship: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="family">Family</option>
+                      <option value="friend">Friend</option>
+                      <option value="colleague">Colleague</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <p className="text-xs text-gray-500">
+                    * At least one contact method (phone or email) is required
+                  </p>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddGuardianForm(false)
+                        if (guardians.length > 0) {
+                          setShowGuardianModal(false)
+                        }
+                      }}
+                      className="flex-1 btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingGuardian || (!guardianForm.phone && !guardianForm.email)}
+                      className="flex-1 btn-primary disabled:opacity-50"
+                    >
+                      {submittingGuardian ? 'Adding...' : 'Add Guardian'}
+                    </button>
+                  </div>
+                </form>
+              ) : guardians.length === 0 ? (
+                // No Guardians - Show Add Form
+                <div className="text-center py-8">
+                  <div className="text-6xl mb-4">👥</div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Guardians Added</h3>
+                  <p className="text-gray-600 mb-6">
+                    Add a guardian to notify them in case of emergency
+                  </p>
+                  <button
+                    onClick={() => setShowAddGuardianForm(true)}
+                    className="btn-primary"
+                  >
+                    Add Guardian
+                  </button>
+                </div>
+              ) : (
+                // Guardian List
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm text-gray-600">
+                      Select a guardian to notify via WhatsApp
+                    </p>
+                    <button
+                      onClick={() => setShowAddGuardianForm(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      + Add Another
+                    </button>
+                  </div>
+
+                  {guardians.map((guardian) => (
+                    <div
+                      key={guardian._id}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">{guardian.name}</h4>
+                          <div className="text-sm text-gray-600 mt-1">
+                            {guardian.phone && (
+                              <div className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                                <span>{guardian.phone}</span>
+                              </div>
+                            )}
+                            {guardian.email && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <span>{guardian.email}</span>
+                              </div>
+                            )}
+                            <div className="mt-1">
+                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">
+                                {guardian.relationship}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleNotifySingleGuardian(guardian)}
+                        disabled={!guardian.phone}
+                        className={`w-full mt-3 py-2 px-4 rounded-lg font-medium transition-colors ${
+                          guardian.phone
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {guardian.phone ? (
+                          <>
+                            <svg className="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                            </svg>
+                            Notify via WhatsApp
+                          </>
+                        ) : (
+                          'No phone number'
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
